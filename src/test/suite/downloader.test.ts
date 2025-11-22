@@ -30,7 +30,7 @@ describe('Excalidraw Downloader Test Suite', () => {
     });
 
     it('should try to download from Room URL (might fail if not persisted)', async () => {
-        const url = 'https://excalidraw.com/#room=0092a02178818466c0e1,ACB6VbVxr9z12Gw2RVaejA';
+        const url = 'https://excalidraw.com/#room=f15d632f15a515ddfcfd,Uak2P-GzHSXNH39tBSBfuQ';
         try {
             const scene = await downloadExcalidraw(url);
             assert.ok(scene, 'Scene should be defined');
