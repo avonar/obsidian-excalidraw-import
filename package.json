@@ -14,7 +14,7 @@
         "plugin",
         "excalidraw"
     ],
-    "author": "Your Name",
+    "author": "Avonar",
     "license": "MIT",
     "devDependencies": {
         "@types/mocha": "^10.0.1",

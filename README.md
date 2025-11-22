@@ -1,44 +1,44 @@
 # Excalidraw Import Plugin for Obsidian
 
-Импорт Excalidraw сцен из публичных URL прямо в Obsidian.
+Import Excalidraw scenes from public URLs directly into Obsidian.
 
-## Возможности
+## Features
 
-- Импорт Excalidraw сцен по URL из `excalidraw.com`
-- Поддержка `#json=ID,KEY` формата
-- Поддержка `#room=ROOM_ID,KEY` формата (если комната сохранена на сервере)
-- Автоматическое сохранение в папку `logs`
-- Автоматическое именование файлов: `DD-MM-YY.excalidraw`
+- Import Excalidraw scenes by URL from `excalidraw.com`
+- Support for `#json=ID,KEY` format
+- Support for `#room=ROOM_ID,KEY` format (if the room is saved on the server)
+- Automatic saving to the `logs` folder
+- Automatic file naming: `DD-MM-YY.excalidraw`
 
-## Установка
+## Installation
 
-1. Скопируйте файлы `main.js` и `manifest.json` в папку `.obsidian/plugins/excalidraw-import/` вашего хранилища
-2. Перезапустите Obsidian
-3. Включите плагин в настройках: Settings → Community plugins → Excalidraw Import
+1. Copy the `main.js` and `manifest.json` files to the `.obsidian/plugins/excalidraw-import/` folder of your vault
+2. Restart Obsidian
+3. Enable the plugin in settings: Settings → Community plugins → Excalidraw Import
 
-## Использование
+## Usage
 
-1. Откройте палитру команд (`Cmd+P` на Mac, `Ctrl+P` на Windows/Linux)
-2. Введите "EXCALIDRAW Import"
-3. Вставьте URL Excalidraw сцены, например:
+1. Open the command palette (`Cmd+P` on Mac, `Ctrl+P` on Windows/Linux)
+2. Type "EXCALIDRAW Import"
+3. Paste the URL of the Excalidraw scene, for example:
    - `https://excalidraw.com/#json=iZjneM_FyVAopRFr6j0HR,oUua4UgiBHpuehmPsp3MCg`
    - `https://excalidraw.com/#room=0092a02178818466c0e1,ACB6VbVxr9z12Gw2RVaejA`
-4. Нажмите OK
-5. Файл будет сохранен в папке `logs` с именем вида `22-11-25.excalidraw`
+4. Press OK
+5. The file will be saved in the `logs` folder with a name like `22-11-25.excalidraw`
 
-## Разработка
+## Development
 
 ```bash
-# Установить зависимости
+# Install dependencies
 npm install
 
-# Собрать плагин
+# Build the plugin
 npm run build
 
-# Запустить тесты
+# Run tests
 npm test
 ```
 
-## Лицензия
+## License
 
 MIT
