@@ -3,7 +3,7 @@
     "name": "Excalidraw Import",
     "version": "0.0.3",
     "minAppVersion": "0.15.0",
-    "description": "Import Excalidraw scenes from URLs",
+    "description": "Import Excalidraw scenes from URLs.",
     "author": "Avonar",
     "authorUrl": "https://github.com/avonar",
     "isDesktopOnly": true
