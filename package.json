@@ -7,7 +7,8 @@
         "dev": "node esbuild.config.mjs",
         "build": "node esbuild.config.mjs production",
         "test": "npm run compile-tests && mocha out/test/suite/*.test.js --timeout 10000",
-        "compile-tests": "tsc -p . -outDir out"
+        "compile-tests": "tsc -p . -outDir out",
+        "community-entry": "node scripts/generate-community-entry.js"
     },
     "keywords": [
         "obsidian",
