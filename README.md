@@ -37,7 +37,14 @@ npm run build
 
 # Run tests
 npm test
+
+# Generate community plugin entry
+npm run community-entry
 ```
+
+## Community Plugin Submission
+
+For information on submitting this plugin to the Obsidian community plugins directory, see [COMMUNITY_SUBMISSION.md](COMMUNITY_SUBMISSION.md).
 
 ## License
 
