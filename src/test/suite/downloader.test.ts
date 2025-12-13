@@ -1,7 +1,11 @@
 import * as assert from "assert";
-import { downloadExcalidraw, type ExcalidrawScene } from "../../excalidrawDownloader";
+import { downloadExcalidraw, cleanup, type ExcalidrawScene } from "../../excalidrawDownloader";
 
 describe('Excalidraw Downloader Test Suite', () => {
+    after(async () => {
+        await cleanup();
+    });
+
     it('should download from JSON URL', async () => {
         const url = 'https://excalidraw.com/#json=iZjneM_FyVAopRFr6j0HR,oUua4UgiBHpuehmPsp3MCg';
         try {

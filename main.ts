@@ -1,9 +1,20 @@
-import { App, Modal, Notice, Plugin, TextComponent } from 'obsidian';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { downloadExcalidraw } from './src/excalidrawDownloader';
 
+interface ExcalidrawImportSettings {
+	saveFolder: string;
+}
+
+const DEFAULT_SETTINGS: ExcalidrawImportSettings = {
+	saveFolder: 'logs'
+};
+
 export default class ExcalidrawImportPlugin extends Plugin {
+	settings: ExcalidrawImportSettings;
 
 	async onload() {
+		await this.loadSettings();
+
 		// Command to import Excalidraw from URL
 		this.addCommand({
 			id: 'import-excalidraw-from-url',
@@ -12,10 +23,21 @@ export default class ExcalidrawImportPlugin extends Plugin {
 				new ExcalidrawUrlModal(this.app, this).open();
 			}
 		});
+
+		// Add settings tab
+		this.addSettingTab(new ExcalidrawImportSettingTab(this.app, this));
 	}
 
 	onunload() {
 		// Cleanup if needed
+	}
+
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
 	}
 
 	async importFromUrl(url: string): Promise<void> {
@@ -30,21 +52,58 @@ export default class ExcalidrawImportPlugin extends Plugin {
 			const year = String(now.getFullYear()).slice(-2);
 			const filename = `${year}-${month}-${day}.excalidraw`;
 			
+			// Ensure folder exists
+			const folder = this.settings.saveFolder;
+			if (folder && !(await this.app.vault.adapter.exists(folder))) {
+				await this.app.vault.createFolder(folder);
+			}
+			
+			// Build full path
+			const basePath = folder ? `${folder}/${filename}` : filename;
+			
 			// Check if file already exists and add suffix if needed
-			let finalFilename = filename;
+			let finalPath = basePath;
 			let counter = 1;
-			while (await this.app.vault.adapter.exists(finalFilename)) {
-				finalFilename = `${year}-${month}-${day}-${counter}.excalidraw`;
+			while (await this.app.vault.adapter.exists(finalPath)) {
+				const nameWithCounter = `${year}-${month}-${day}-${counter}.excalidraw`;
+				finalPath = folder ? `${folder}/${nameWithCounter}` : nameWithCounter;
 				counter++;
 			}
 			
 			// Save to vault
-			await this.app.vault.create(finalFilename, JSON.stringify(scene, null, 2));
-			new Notice(`Saved: ${finalFilename}`);
+			await this.app.vault.create(finalPath, JSON.stringify(scene, null, 2));
+			new Notice(`Saved: ${finalPath}`);
 		} catch (error) {
 			new Notice(`Error: ${(error as Error).message}`);
 			console.error('[Excalidraw Import]', error);
 		}
+	}
+}
+
+class ExcalidrawImportSettingTab extends PluginSettingTab {
+	plugin: ExcalidrawImportPlugin;
+
+	constructor(app: App, plugin: ExcalidrawImportPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		containerEl.createEl('h2', { text: 'Excalidraw Import Settings' });
+
+		new Setting(containerEl)
+			.setName('Save folder')
+			.setDesc('Folder where imported Excalidraw files will be saved. Leave empty to save in vault root.')
+			.addText(text => text
+				.setPlaceholder('logs')
+				.setValue(this.plugin.settings.saveFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.saveFolder = value.trim();
+					await this.plugin.saveSettings();
+				}));
 	}
 }
 

@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import * as pako from "pako";
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
 
 export interface ExcalidrawScene {
@@ -32,6 +32,18 @@ function getFirestoreInstance(): Firestore {
         firestoreDb = getFirestore(firebaseApp);
     }
     return firestoreDb;
+}
+
+/**
+ * Cleanup Firebase resources. Call this when done with downloads.
+ */
+export async function cleanup(): Promise<void> {
+    if (firebaseApp) {
+        await deleteApp(firebaseApp);
+        firebaseApp = null;
+        firestoreDb = null;
+        console.log('[Excalidraw] Firebase cleaned up');
+    }
 }
 
 async function downloadFromRoom(roomId: string, roomKey: string): Promise<ExcalidrawScene> {
