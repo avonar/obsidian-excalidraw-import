@@ -20,11 +20,23 @@ Import Excalidraw scenes from public URLs directly into Obsidian.
 
 1. Open the command palette (`Cmd+P` on Mac, `Ctrl+P` on Windows/Linux)
 2. Type "EXCALIDRAW Import"
+   <details>
+   <summary>Show image</summary>
+   <img src="imgs/ctrl_p.png" alt="Command Palette">
+   </details>
 3. Paste the URL of the Excalidraw scene, for example:
    - `https://excalidraw.com/#json=iZjneM_FyVAopRFr6j0HR,oUua4UgiBHpuehmPsp3MCg`
    - `https://excalidraw.com/#room=f15d632f15a515ddfcfd,Uak2P-GzHSXNH39tBSBfuQ`
+   <details>
+   <summary>Show image</summary>
+   <img src="imgs/insert_url.png" alt="Command Palette">
+   </details>
 4. Press OK
 5. The file will be saved in the `logs` folder with a name like `22-11-25.excalidraw`
+   <details>
+   <summary>Show image</summary>
+   <img src="imgs/logs.png" alt="Command Palette">
+   </details>
 
 ## Development
 
