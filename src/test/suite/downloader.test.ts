@@ -30,18 +30,22 @@ describe('Excalidraw Downloader Test Suite', () => {
         }
     });
 
-    it('should return 404 error for non-persisted Room URL', async () => {
-        const url = 'https://excalidraw.com/#room=f15d632f15a515ddfcfd,Uak2P-GzHSXNH39tBSBfuQ';
+    it('should download from Room URL via Firebase', async () => {
+        // Working room URL from test-firebase-room.js
+        const url = 'https://excalidraw.com/#room=0092a02178818466c0e1,ACB6VbVxr9z12Gw2RVaejA';
         try {
-            await downloadExcalidraw(url);
-            assert.fail('Should have thrown an error for non-persisted room');
+            const scene = await downloadExcalidraw(url);
+            assert.ok(scene, 'Scene should be defined');
+
+            // Validate Excalidraw scene structure
+            assert.strictEqual(scene.type, 'excalidraw', 'Scene type should be excalidraw');
+            assert.ok(Array.isArray(scene.elements), 'Elements should be an array');
+            assert.ok(typeof scene.version === 'number', 'Version should be a number');
+            assert.ok(typeof scene.source === 'string', 'Source should be a string');
+
+            console.log('Successfully downloaded Room scene with ' + scene.elements.length + ' elements');
         } catch (err) {
-            const message = (err as Error).message;
-            assert.ok(
-                message.includes('Scene not found') || message.includes('not be persisted'),
-                `Expected 404/not found error, got: ${message}`
-            );
-            console.log('Room URL correctly returned 404 error');
+            assert.fail(`Room download failed: ${(err as Error).message}`);
         }
     });
 

@@ -1,5 +1,7 @@
 import * as crypto from "crypto";
 import * as pako from "pako";
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
 
 export interface ExcalidrawScene {
     type: "excalidraw";
@@ -9,44 +11,98 @@ export interface ExcalidrawScene {
     appState?: unknown;
 }
 
-export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> {
-    console.log('[Excalidraw] Starting download from URL:', url);
+// Excalidraw Firebase configuration (publicly available)
+const firebaseConfig = {
+    apiKey: "AIzaSyBjRN2L_WyJcfe-8kUHxjWfVW7FT0B8vp4",
+    authDomain: "excalidraw-room-persistence.firebaseapp.com",
+    projectId: "excalidraw-room-persistence",
+    storageBucket: "excalidraw-room-persistence.appspot.com",
+    messagingSenderId: "654800341332",
+    appId: "1:654800341332:web:4a692de0d3383706"
+};
 
-    // 1. Parse the URL
-    let hash = '';
-    try {
-        const parsedUrl = new URL(url);
-        hash = parsedUrl.hash.slice(1); // Remove '#'
-        console.log('[Excalidraw] Parsed hash:', hash);
-    } catch (e) {
-        throw new Error("Invalid URL");
+let firebaseApp: FirebaseApp | null = null;
+let firestoreDb: Firestore | null = null;
+
+function getFirestoreInstance(): Firestore {
+    if (!firebaseApp) {
+        firebaseApp = initializeApp(firebaseConfig);
     }
+    if (!firestoreDb) {
+        firestoreDb = getFirestore(firebaseApp);
+    }
+    return firestoreDb;
+}
 
-    let id: string | undefined;
-    let keyString: string | undefined;
-
-    if (hash.startsWith('json=')) {
-        // Format: #json=ID,KEY
-        const parts = hash.split('=')[1].split(',');
-        id = parts[0];
-        keyString = parts[1];
-        console.log('[Excalidraw] JSON format - ID:', id);
-    } else if (hash.startsWith('room=')) {
-        // Format: #room=ROOM_ID,KEY
-        const parts = hash.split('=')[1].split(',');
-        id = parts[0];
-        keyString = parts[1];
-        console.log('[Excalidraw] Room format - ID:', id);
-        // Note: This assumes the room is persisted. If not, the fetch will likely fail or return 404.
+async function downloadFromRoom(roomId: string, roomKey: string): Promise<ExcalidrawScene> {
+    console.log('[Excalidraw] Loading room from Firebase:', roomId);
+    
+    const db = getFirestoreInstance();
+    const docRef = doc(db, 'scenes', roomId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+        throw new Error(`Room not found in Firebase: ${roomId}`);
+    }
+    
+    console.log('[Excalidraw] Room document found!');
+    const data = docSnap.data();
+    
+    if (!data.ciphertext || !data.iv) {
+        throw new Error('Room data is missing ciphertext or iv');
+    }
+    
+    // Firebase Firestore Bytes need to be converted to Uint8Array
+    const ciphertextBytes = new Uint8Array(data.ciphertext.toUint8Array());
+    const ivBytes = new Uint8Array(data.iv.toUint8Array());
+    
+    console.log('[Excalidraw] Decrypting room data...');
+    
+    // Decrypt using the room key
+    const key = Buffer.from(roomKey, 'base64');
+    const importedKey = await crypto.webcrypto.subtle.importKey(
+        "raw",
+        key,
+        { name: "AES-GCM" },
+        true,
+        ["decrypt"]
+    );
+    
+    const decryptedBuffer = await crypto.webcrypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv: ivBytes
+        },
+        importedKey,
+        ciphertextBytes
+    );
+    
+    const decodedString = new TextDecoder().decode(decryptedBuffer);
+    const sceneData = JSON.parse(decodedString);
+    
+    console.log('[Excalidraw] Room decrypted successfully');
+    
+    // Firebase stores just the elements array, not the full scene object
+    let finalScene: ExcalidrawScene;
+    if (Array.isArray(sceneData)) {
+        finalScene = {
+            type: 'excalidraw',
+            version: 2,
+            source: 'https://excalidraw.com',
+            elements: sceneData,
+            appState: {}
+        };
+    } else if (sceneData.type === 'excalidraw') {
+        finalScene = sceneData as ExcalidrawScene;
     } else {
-        throw new Error("Invalid Excalidraw URL format. Must contain #json= or #room=");
+        throw new Error('Invalid room data format');
     }
+    
+    console.log('[Excalidraw] Room elements count:', finalScene.elements.length);
+    return finalScene;
+}
 
-    if (!id || !keyString) {
-        throw new Error("Could not extract ID or Key from URL");
-    }
-
-    // 2. Fetch Encrypted Data
+async function downloadFromJson(id: string, keyString: string): Promise<ExcalidrawScene> {
     const apiUrl = `https://json.excalidraw.com/api/v2/${id}`;
     console.log('[Excalidraw] Fetching from:', apiUrl);
 
@@ -55,7 +111,7 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
 
     if (!response.ok) {
         if (response.status === 404) {
-            throw new Error(`Scene not found. If this is a room URL, the scene might not be persisted on the server.`);
+            throw new Error(`Scene not found: ${id}`);
         }
         throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
     }
@@ -99,10 +155,9 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
     // Read ciphertext
     const ciphertext = bytes.slice(offset, offset + ciphertextLength);
 
-    // 3. Decrypt Data
+    // Decrypt Data
     const key = Buffer.from(keyString, 'base64');
 
-    // Use WebCrypto API (available in Node.js 15+ and VS Code environment)
     const importedKey = await crypto.webcrypto.subtle.importKey(
         "raw",
         key,
@@ -167,5 +222,51 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
             throw error;
         }
         throw new Error(`Decryption failed. The key might be incorrect. Error: ${errMsg}`);
+    }
+}
+
+export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> {
+    console.log('[Excalidraw] Starting download from URL:', url);
+
+    // 1. Parse the URL
+    let hash = '';
+    try {
+        const parsedUrl = new URL(url);
+        hash = parsedUrl.hash.slice(1); // Remove '#'
+        console.log('[Excalidraw] Parsed hash:', hash);
+    } catch (e) {
+        throw new Error("Invalid URL");
+    }
+
+    let id: string | undefined;
+    let keyString: string | undefined;
+    let isRoom = false;
+
+    if (hash.startsWith('json=')) {
+        // Format: #json=ID,KEY
+        const parts = hash.split('=')[1].split(',');
+        id = parts[0];
+        keyString = parts[1];
+        console.log('[Excalidraw] JSON format - ID:', id);
+    } else if (hash.startsWith('room=')) {
+        // Format: #room=ROOM_ID,KEY
+        const parts = hash.split('=')[1].split(',');
+        id = parts[0];
+        keyString = parts[1];
+        isRoom = true;
+        console.log('[Excalidraw] Room format - ID:', id);
+    } else {
+        throw new Error("Invalid Excalidraw URL format. Must contain #json= or #room=");
+    }
+
+    if (!id || !keyString) {
+        throw new Error("Could not extract ID or Key from URL");
+    }
+
+    // 2. Download based on type
+    if (isRoom) {
+        return downloadFromRoom(id, keyString);
+    } else {
+        return downloadFromJson(id, keyString);
     }
 }
