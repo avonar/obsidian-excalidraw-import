@@ -1,189 +1,115 @@
-import { Plugin, Notice, TFolder, TFile, PluginSettingTab, App, Setting } from 'obsidian';
+import { App, Modal, Notice, Plugin, TextComponent } from 'obsidian';
 import { downloadExcalidraw } from './src/excalidrawDownloader';
 
-interface ExcalidrawImportSettings {
-    folderPath: string;
-}
-
-const DEFAULT_SETTINGS: ExcalidrawImportSettings = {
-    folderPath: 'logs'
-};
-
 export default class ExcalidrawImportPlugin extends Plugin {
-    settings!: ExcalidrawImportSettings;
 
-    async onload() {
-        console.log('Loading Excalidraw Import plugin');
+	async onload() {
+		// Command to import Excalidraw from URL
+		this.addCommand({
+			id: 'import-excalidraw-from-url',
+			name: 'Import Excalidraw from URL',
+			callback: () => {
+				new ExcalidrawUrlModal(this.app, this).open();
+			}
+		});
+	}
 
-        await this.loadSettings();
+	onunload() {
+		// Cleanup if needed
+	}
 
-        this.addCommand({
-            id: 'excalidraw-import',
-            name: 'EXCALIDRAW Import',
-            callback: async () => {
-                await this.importExcalidraw();
-            }
-        });
-
-        this.addSettingTab(new ExcalidrawImportSettingTab(this.app, this));
-    }
-
-    async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    }
-
-    async saveSettings() {
-        await this.saveData(this.settings);
-    }
-
-    async importExcalidraw() {
-        // 1. Get URL from user
-        const url = await this.promptForUrl();
-        if (!url) {
-            return;
-        }
-
-        try {
-            // 2. Download scene
-            new Notice('Downloading Excalidraw scene...');
-            const sceneData = await downloadExcalidraw(url);
-
-            // 3. Get or create logs folder
-            const logsFolder = await this.getOrCreateLogsFolder();
-
-            // 4. Generate filename DD-MM-YY.excalidraw
-            const now = new Date();
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = String(now.getFullYear()).slice(-2);
-            const filename = `${day}-${month}-${year}.excalidraw`;
-
-            // 5. Save file
-            const filePath = `${logsFolder.path}/${filename}`;
-            const content = JSON.stringify(sceneData, null, 2);
-
-            // Check if file exists
-            const existingFile = this.app.vault.getAbstractFileByPath(filePath);
-            if (existingFile instanceof TFile) {
-                // File exists, append timestamp to make unique
-                const timestamp = now.getTime();
-                const uniqueFilename = `${day}-${month}-${year}-${timestamp}.excalidraw`;
-                const uniquePath = `${logsFolder.path}/${uniqueFilename}`;
-                await this.app.vault.create(uniquePath, content);
-                new Notice(`Excalidraw scene saved to ${uniqueFilename}`);
-            } else {
-                await this.app.vault.create(filePath, content);
-                new Notice(`Excalidraw scene saved to ${filename}`);
-            }
-
-        } catch (error) {
-            new Notice(`Error: ${(error as Error).message}`);
-            console.error('Excalidraw import error:', error);
-        }
-    }
-
-    async promptForUrl(): Promise<string | null> {
-        return new Promise((resolve) => {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--background-primary); padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 1000;';
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = 'Enter Excalidraw URL (e.g. https://excalidraw.com/#json=...)';
-            input.style.cssText = 'width: 400px; padding: 8px; margin-bottom: 10px; border: 1px solid var(--background-modifier-border); border-radius: 4px; background: var(--background-primary); color: var(--text-normal);';
-
-            const buttonContainer = document.createElement('div');
-            buttonContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
-
-            const okButton = document.createElement('button');
-            okButton.textContent = 'OK';
-            okButton.style.cssText = 'padding: 8px 16px; border-radius: 4px; border: none; background: var(--interactive-accent); color: var(--text-on-accent); cursor: pointer;';
-
-            const cancelButton = document.createElement('button');
-            cancelButton.textContent = 'Cancel';
-            cancelButton.style.cssText = 'padding: 8px 16px; border-radius: 4px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); cursor: pointer;';
-
-            const backdrop = document.createElement('div');
-            backdrop.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999;';
-
-            const cleanup = () => {
-                modal.remove();
-                backdrop.remove();
-            };
-
-            okButton.onclick = () => {
-                const value = input.value.trim();
-                cleanup();
-                resolve(value || null);
-            };
-
-            cancelButton.onclick = () => {
-                cleanup();
-                resolve(null);
-            };
-
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter') {
-                    okButton.click();
-                } else if (e.key === 'Escape') {
-                    cancelButton.click();
-                }
-            };
-
-            buttonContainer.appendChild(cancelButton);
-            buttonContainer.appendChild(okButton);
-            modal.appendChild(input);
-            modal.appendChild(buttonContainer);
-
-            document.body.appendChild(backdrop);
-            document.body.appendChild(modal);
-            input.focus();
-        });
-    }
-
-    async getOrCreateLogsFolder(): Promise<TFolder> {
-        const logsPath = this.settings.folderPath;
-        const folder = this.app.vault.getAbstractFileByPath(logsPath);
-
-        if (folder instanceof TFolder) {
-            return folder;
-        }
-
-        // Create folder
-        await this.app.vault.createFolder(logsPath);
-        return this.app.vault.getAbstractFileByPath(logsPath) as TFolder;
-    }
-
-    onunload() {
-        console.log('Unloading Excalidraw Import plugin');
-    }
+	async importFromUrl(url: string): Promise<void> {
+		try {
+			new Notice('Downloading Excalidraw scene...');
+			const scene = await downloadExcalidraw(url);
+			
+			// Generate filename based on current date
+			const now = new Date();
+			const day = String(now.getDate()).padStart(2, '0');
+			const month = String(now.getMonth() + 1).padStart(2, '0');
+			const year = String(now.getFullYear()).slice(-2);
+			const filename = `${year}-${month}-${day}.excalidraw`;
+			
+			// Check if file already exists and add suffix if needed
+			let finalFilename = filename;
+			let counter = 1;
+			while (await this.app.vault.adapter.exists(finalFilename)) {
+				finalFilename = `${year}-${month}-${day}-${counter}.excalidraw`;
+				counter++;
+			}
+			
+			// Save to vault
+			await this.app.vault.create(finalFilename, JSON.stringify(scene, null, 2));
+			new Notice(`Saved: ${finalFilename}`);
+		} catch (error) {
+			new Notice(`Error: ${(error as Error).message}`);
+			console.error('[Excalidraw Import]', error);
+		}
+	}
 }
 
-class ExcalidrawImportSettingTab extends PluginSettingTab {
-    plugin: ExcalidrawImportPlugin;
+class ExcalidrawUrlModal extends Modal {
+	plugin: ExcalidrawImportPlugin;
+	urlInput: TextComponent;
 
-    constructor(app: App, plugin: ExcalidrawImportPlugin) {
-        super(app, plugin);
-        this.plugin = plugin;
-    }
+	constructor(app: App, plugin: ExcalidrawImportPlugin) {
+		super(app);
+		this.plugin = plugin;
+	}
 
-    display(): void {
-        const { containerEl } = this;
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl('h2', { text: 'Import Excalidraw from URL' });
+		
+		contentEl.createEl('p', { 
+			text: 'Enter an Excalidraw URL (e.g., https://excalidraw.com/#json=... or https://excalidraw.com/#room=...)'
+		});
 
-        containerEl.empty();
+		const inputContainer = contentEl.createDiv({ cls: 'excalidraw-import-input' });
+		
+		const inputEl = inputContainer.createEl('input', {
+			type: 'text',
+			placeholder: 'https://excalidraw.com/#json=...'
+		});
+		inputEl.style.width = '100%';
+		inputEl.style.marginBottom = '10px';
 
-        containerEl.createEl('h2', { text: 'Excalidraw Import Settings' });
+		const buttonContainer = contentEl.createDiv({ cls: 'excalidraw-import-buttons' });
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.justifyContent = 'flex-end';
+		buttonContainer.style.gap = '10px';
 
-        new Setting(containerEl)
-            .setName('Folder path')
-            .setDesc('Folder where Excalidraw files will be saved (relative to vault root)')
-            .addText(text => text
-                .setPlaceholder('logs')
-                .setValue(this.plugin.settings.folderPath)
-                .onChange(async (value) => {
-                    this.plugin.settings.folderPath = value || 'logs';
-                    await this.plugin.saveSettings();
-                }));
-    }
+		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		const importBtn = buttonContainer.createEl('button', { text: 'Import', cls: 'mod-cta' });
+		importBtn.addEventListener('click', async () => {
+			const url = inputEl.value.trim();
+			if (url) {
+				this.close();
+				await this.plugin.importFromUrl(url);
+			} else {
+				new Notice('Please enter a URL');
+			}
+		});
+
+		// Handle Enter key
+		inputEl.addEventListener('keydown', async (e) => {
+			if (e.key === 'Enter') {
+				const url = inputEl.value.trim();
+				if (url) {
+					this.close();
+					await this.plugin.importFromUrl(url);
+				}
+			}
+		});
+
+		// Focus input
+		inputEl.focus();
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
 }

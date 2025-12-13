@@ -1,13 +1,12 @@
-import * as crypto from 'crypto';
-import * as pako from 'pako';
+import * as crypto from "crypto";
+import * as pako from "pako";
 
 export interface ExcalidrawScene {
-    type: string;
+    type: "excalidraw";
     version: number;
     source: string;
-    elements: any[];
-    appState: any;
-    files: any;
+    elements: unknown[];
+    appState?: unknown;
 }
 
 export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> {
@@ -50,6 +49,7 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
     // 2. Fetch Encrypted Data
     const apiUrl = `https://json.excalidraw.com/api/v2/${id}`;
     console.log('[Excalidraw] Fetching from:', apiUrl);
+
     const response = await fetch(apiUrl);
     console.log('[Excalidraw] Response status:', response.status);
 
@@ -81,7 +81,7 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
     const headerBytes = bytes.slice(offset, offset + headerLength);
     offset += headerLength;
     const headerText = new TextDecoder().decode(headerBytes);
-    const header = JSON.parse(headerText) as { version: number; compression?: string; encryption: string };
+    const header = JSON.parse(headerText) as { version: number; compression: string; encryption: string };
     console.log('[Excalidraw] Header:', header);
 
     // Read IV length (4 bytes, big-endian)
@@ -97,7 +97,9 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
     offset += 4;
 
     // Read ciphertext
-    const ciphertext = bytes.slice(offset, offset + ciphertextLength);        // 3. Decrypt Data
+    const ciphertext = bytes.slice(offset, offset + ciphertextLength);
+
+    // 3. Decrypt Data
     const key = Buffer.from(keyString, 'base64');
 
     // Use WebCrypto API (available in Node.js 15+ and VS Code environment)
@@ -124,7 +126,6 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
         // Decompress if needed
         if (header.compression === 'pako@1') {
             const decompressed = pako.inflate(new Uint8Array(decryptedBuffer));
-
             // The decompressed data has a binary prefix before the JSON
             // Find where the JSON starts (look for '{')
             let jsonStart = 0;
@@ -159,7 +160,7 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
             throw new Error('Invalid Excalidraw data: missing or invalid "elements" array');
         }
 
-        return sceneData;
+        return sceneData as ExcalidrawScene;
     } catch (error) {
         const errMsg = (error as Error).message;
         if (errMsg.includes('Invalid Excalidraw data') || errMsg.includes('Invalid JSON data')) {
