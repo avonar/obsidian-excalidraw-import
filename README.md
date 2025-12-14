@@ -8,7 +8,7 @@ Import Excalidraw scenes from public URLs directly into Obsidian.
 - Support for `#json=ID,KEY` format
 - Support for `#room=ROOM_ID,KEY` format (if the room is saved on the server)
 - Automatic saving to the `logs` folder
-- Automatic file naming: `DD-MM-YY.excalidraw`
+- Automatic file naming: `YY-MM-DD.excalidraw`
 
 ## Installation
 
