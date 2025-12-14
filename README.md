@@ -32,7 +32,7 @@ Import Excalidraw scenes from public URLs directly into Obsidian.
    <img src="imgs/insert_url.png" alt="Command Palette">
    </details>
 4. Press OK
-5. The file will be saved in the `logs` folder with a name like `22-11-25.excalidraw`
+5. The file will be saved in the `logs` folder with a name like `YY-MM-DD.excalidraw`
    <details>
    <summary>Show image</summary>
    <img src="imgs/logs.png" alt="Command Palette">
