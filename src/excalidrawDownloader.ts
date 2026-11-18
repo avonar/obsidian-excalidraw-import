@@ -1,4 +1,3 @@
-import * as crypto from "crypto";
 import * as pako from "pako";
 import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
@@ -21,6 +20,30 @@ const firebaseConfig = {
     appId: "1:654800341332:web:4a692de0d3383706"
 };
 
+/**
+ * Fetches a URL and returns the response body as binary data.
+ * Inside Obsidian this is backed by `requestUrl`; the default uses global `fetch`.
+ */
+export type BinaryFetcher = (url: string) => Promise<{ status: number; arrayBuffer: ArrayBuffer }>;
+
+const defaultFetcher: BinaryFetcher = async (url) => {
+    const response = await fetch(url);
+    return { status: response.status, arrayBuffer: await response.arrayBuffer() };
+};
+
+/**
+ * Imports an Excalidraw AES-GCM key (base64url string from the share link).
+ */
+function importKey(keyString: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+        "jwk",
+        { alg: "A128GCM", ext: true, k: keyString, key_ops: ["decrypt"], kty: "oct" },
+        { name: "AES-GCM", length: 128 },
+        false,
+        ["decrypt"]
+    );
+}
+
 let firebaseApp: FirebaseApp | null = null;
 let firestoreDb: Firestore | null = null;
 
@@ -42,12 +65,10 @@ export async function cleanup(): Promise<void> {
         await deleteApp(firebaseApp);
         firebaseApp = null;
         firestoreDb = null;
-        console.log('[Excalidraw] Firebase cleaned up');
     }
 }
 
 async function downloadFromRoom(roomId: string, roomKey: string): Promise<ExcalidrawScene> {
-    console.log('[Excalidraw] Loading room from Firebase:', roomId);
     
     const db = getFirestoreInstance();
     const docRef = doc(db, 'scenes', roomId);
@@ -57,7 +78,6 @@ async function downloadFromRoom(roomId: string, roomKey: string): Promise<Excali
         throw new Error(`Room not found in Firebase: ${roomId}`);
     }
     
-    console.log('[Excalidraw] Room document found!');
     const data = docSnap.data();
     
     if (!data.ciphertext || !data.iv) {
@@ -68,19 +88,11 @@ async function downloadFromRoom(roomId: string, roomKey: string): Promise<Excali
     const ciphertextBytes = new Uint8Array(data.ciphertext.toUint8Array());
     const ivBytes = new Uint8Array(data.iv.toUint8Array());
     
-    console.log('[Excalidraw] Decrypting room data...');
     
     // Decrypt using the room key
-    const key = Buffer.from(roomKey, 'base64');
-    const importedKey = await crypto.webcrypto.subtle.importKey(
-        "raw",
-        key,
-        { name: "AES-GCM" },
-        true,
-        ["decrypt"]
-    );
+    const importedKey = await importKey(roomKey);
     
-    const decryptedBuffer = await crypto.webcrypto.subtle.decrypt(
+    const decryptedBuffer = await crypto.subtle.decrypt(
         {
             name: "AES-GCM",
             iv: ivBytes
@@ -92,7 +104,6 @@ async function downloadFromRoom(roomId: string, roomKey: string): Promise<Excali
     const decodedString = new TextDecoder().decode(decryptedBuffer);
     const sceneData = JSON.parse(decodedString);
     
-    console.log('[Excalidraw] Room decrypted successfully');
     
     // Firebase stores just the elements array, not the full scene object
     let finalScene: ExcalidrawScene;
@@ -110,36 +121,31 @@ async function downloadFromRoom(roomId: string, roomKey: string): Promise<Excali
         throw new Error('Invalid room data format');
     }
     
-    console.log('[Excalidraw] Room elements count:', finalScene.elements.length);
     return finalScene;
 }
 
-async function downloadFromJson(id: string, keyString: string): Promise<ExcalidrawScene> {
+async function downloadFromJson(id: string, keyString: string, fetchBinary: BinaryFetcher): Promise<ExcalidrawScene> {
     const apiUrl = `https://json.excalidraw.com/api/v2/${id}`;
-    console.log('[Excalidraw] Fetching from:', apiUrl);
 
-    const response = await fetch(apiUrl);
-    console.log('[Excalidraw] Response status:', response.status);
+    const response = await fetchBinary(apiUrl);
 
-    if (!response.ok) {
-        if (response.status === 404) {
-            throw new Error(`Scene not found: ${id}`);
-        }
-        throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+    if (response.status === 404) {
+        throw new Error(`Scene not found: ${id}`);
+    }
+    if (response.status < 200 || response.status >= 300) {
+        throw new Error(`Failed to fetch data: ${response.status}`);
     }
 
     // New format: binary data with length-prefixed fields
-    const arrayBuffer = await response.arrayBuffer();
+    const arrayBuffer = response.arrayBuffer;
     const bytes = new Uint8Array(arrayBuffer);
     const view = new DataView(arrayBuffer);
-    console.log('[Excalidraw] Received', bytes.length, 'bytes');
 
     let offset = 0;
 
     // Read version (4 bytes, big-endian)
     const version = view.getUint32(offset, false);
     offset += 4;
-    console.log('[Excalidraw] Binary format version:', version);
 
     // Read header length (4 bytes, big-endian)
     const headerLength = view.getUint32(offset, false);
@@ -150,7 +156,6 @@ async function downloadFromJson(id: string, keyString: string): Promise<Excalidr
     offset += headerLength;
     const headerText = new TextDecoder().decode(headerBytes);
     const header = JSON.parse(headerText) as { version: number; compression: string; encryption: string };
-    console.log('[Excalidraw] Header:', header);
 
     // Read IV length (4 bytes, big-endian)
     const ivLength = view.getUint32(offset, false);
@@ -168,18 +173,10 @@ async function downloadFromJson(id: string, keyString: string): Promise<Excalidr
     const ciphertext = bytes.slice(offset, offset + ciphertextLength);
 
     // Decrypt Data
-    const key = Buffer.from(keyString, 'base64');
-
-    const importedKey = await crypto.webcrypto.subtle.importKey(
-        "raw",
-        key,
-        { name: "AES-GCM" },
-        true,
-        ["decrypt"]
-    );
+    const importedKey = await importKey(keyString);
 
     try {
-        const decryptedBuffer = await crypto.webcrypto.subtle.decrypt(
+        const decryptedBuffer = await crypto.subtle.decrypt(
             {
                 name: "AES-GCM",
                 iv: iv
@@ -209,10 +206,6 @@ async function downloadFromJson(id: string, keyString: string): Promise<Excalidr
 
         const sceneData = JSON.parse(decodedString);
 
-        // Debug logging
-        console.log('Parsed scene data keys:', Object.keys(sceneData));
-        console.log('Scene type:', sceneData.type);
-        console.log('Elements count:', sceneData.elements?.length);
 
         // Validate that we got valid Excalidraw data
         if (!sceneData || typeof sceneData !== 'object') {
@@ -237,15 +230,13 @@ async function downloadFromJson(id: string, keyString: string): Promise<Excalidr
     }
 }
 
-export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> {
-    console.log('[Excalidraw] Starting download from URL:', url);
+export async function downloadExcalidraw(url: string, fetchBinary: BinaryFetcher = defaultFetcher): Promise<ExcalidrawScene> {
 
     // 1. Parse the URL
     let hash = '';
     try {
         const parsedUrl = new URL(url);
         hash = parsedUrl.hash.slice(1); // Remove '#'
-        console.log('[Excalidraw] Parsed hash:', hash);
     } catch (e) {
         throw new Error("Invalid URL");
     }
@@ -259,14 +250,12 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
         const parts = hash.split('=')[1].split(',');
         id = parts[0];
         keyString = parts[1];
-        console.log('[Excalidraw] JSON format - ID:', id);
     } else if (hash.startsWith('room=')) {
         // Format: #room=ROOM_ID,KEY
         const parts = hash.split('=')[1].split(',');
         id = parts[0];
         keyString = parts[1];
         isRoom = true;
-        console.log('[Excalidraw] Room format - ID:', id);
     } else {
         throw new Error("Invalid Excalidraw URL format. Must contain #json= or #room=");
     }
@@ -279,6 +268,6 @@ export async function downloadExcalidraw(url: string): Promise<ExcalidrawScene> 
     if (isRoom) {
         return downloadFromRoom(id, keyString);
     } else {
-        return downloadFromJson(id, keyString);
+        return downloadFromJson(id, keyString, fetchBinary);
     }
 }

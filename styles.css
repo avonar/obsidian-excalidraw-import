@@ -1,8 +1,10 @@
-/*
+.excalidraw-import-input input {
+	width: 100%;
+	margin-bottom: 10px;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
-*/
+.excalidraw-import-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+}

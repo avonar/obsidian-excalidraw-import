@@ -1,5 +1,10 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { downloadExcalidraw } from './src/excalidrawDownloader';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath, requestUrl } from 'obsidian';
+import { downloadExcalidraw, cleanup, type BinaryFetcher } from './src/excalidrawDownloader';
+
+const obsidianFetcher: BinaryFetcher = async (url) => {
+	const response = await requestUrl({ url, throw: false });
+	return { status: response.status, arrayBuffer: response.arrayBuffer };
+};
 
 interface ExcalidrawImportSettings {
 	saveFolder: string;
@@ -10,7 +15,7 @@ const DEFAULT_SETTINGS: ExcalidrawImportSettings = {
 };
 
 export default class ExcalidrawImportPlugin extends Plugin {
-	settings: ExcalidrawImportSettings;
+	settings!: ExcalidrawImportSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -29,7 +34,7 @@ export default class ExcalidrawImportPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Cleanup if needed
+		void cleanup();
 	}
 
 	async loadSettings() {
@@ -43,7 +48,7 @@ export default class ExcalidrawImportPlugin extends Plugin {
 	async importFromUrl(url: string): Promise<void> {
 		try {
 			new Notice('Downloading Excalidraw scene...');
-			const scene = await downloadExcalidraw(url);
+			const scene = await downloadExcalidraw(url, obsidianFetcher);
 			
 			// Generate filename based on current date
 			const now = new Date();
@@ -53,8 +58,8 @@ export default class ExcalidrawImportPlugin extends Plugin {
 			const filename = `${year}-${month}-${day}.excalidraw`;
 			
 			// Ensure folder exists
-			const folder = this.settings.saveFolder;
-			if (folder && !(await this.app.vault.adapter.exists(folder))) {
+			const folder = this.settings.saveFolder ? normalizePath(this.settings.saveFolder) : '';
+			if (folder && !this.app.vault.getAbstractFileByPath(folder)) {
 				await this.app.vault.createFolder(folder);
 			}
 			
@@ -64,7 +69,7 @@ export default class ExcalidrawImportPlugin extends Plugin {
 			// Check if file already exists and add suffix if needed
 			let finalPath = basePath;
 			let counter = 1;
-			while (await this.app.vault.adapter.exists(finalPath)) {
+			while (this.app.vault.getAbstractFileByPath(finalPath)) {
 				const nameWithCounter = `${year}-${month}-${day}-${counter}.excalidraw`;
 				finalPath = folder ? `${folder}/${nameWithCounter}` : nameWithCounter;
 				counter++;
@@ -92,8 +97,6 @@ class ExcalidrawImportSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Excalidraw Import Settings' });
-
 		new Setting(containerEl)
 			.setName('Save folder')
 			.setDesc('Folder where imported Excalidraw files will be saved. Leave empty to save in vault root.')
@@ -109,7 +112,6 @@ class ExcalidrawImportSettingTab extends PluginSettingTab {
 
 class ExcalidrawUrlModal extends Modal {
 	plugin: ExcalidrawImportPlugin;
-	urlInput: TextComponent;
 
 	constructor(app: App, plugin: ExcalidrawImportPlugin) {
 		super(app);
@@ -118,7 +120,7 @@ class ExcalidrawUrlModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl('h2', { text: 'Import Excalidraw from URL' });
+		this.titleEl.setText('Import Excalidraw from URL');
 		
 		contentEl.createEl('p', { 
 			text: 'Enter an Excalidraw URL (e.g., https://excalidraw.com/#json=... or https://excalidraw.com/#room=...)'
@@ -130,13 +132,8 @@ class ExcalidrawUrlModal extends Modal {
 			type: 'text',
 			placeholder: 'https://excalidraw.com/#json=...'
 		});
-		inputEl.style.width = '100%';
-		inputEl.style.marginBottom = '10px';
 
 		const buttonContainer = contentEl.createDiv({ cls: 'excalidraw-import-buttons' });
-		buttonContainer.style.display = 'flex';
-		buttonContainer.style.justifyContent = 'flex-end';
-		buttonContainer.style.gap = '10px';
 
 		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
 		cancelBtn.addEventListener('click', () => this.close());
